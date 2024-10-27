@@ -5,13 +5,18 @@ To use this tool, provide the message you want to send, the name of the agency t
 """
 
 import asyncio
+import logging
 
 from agency_swarm.agency import Agency
+from agency_swarm.threads import Thread
+from agency_swarm.threads.thread_async import ThreadAsync
 from agency_swarm.tools import BaseTool
 from pydantic import Field
 
 from voice_assistant.agencies import AGENCIES, AGENCIES_AND_AGENTS_STRING
 from voice_assistant.utils.decorators import timeit_decorator
+
+logger = logging.getLogger(__name__)
 
 
 class SendMessageAsync(BaseTool):
@@ -19,7 +24,7 @@ class SendMessageAsync(BaseTool):
     Sends a message to a specific agent within a specified agency without waiting for an immediate response.
 
     Use this tool to initiate long-running tasks asynchronously.
-    After sending the message, it returns a 'thread_id' which can be used with the 'GetResponse' tool to check the status or retrieve the agent's response later.
+    After sending the message, you can use the 'GetResponse' tool with the same 'agency_name' and 'agent_name' values to check the status or retrieve the agent's response.
     This allows you to perform other tasks or interact with the user while the agent processes the request.
 
     Available Agencies and Agents:
@@ -45,21 +50,32 @@ class SendMessageAsync(BaseTool):
         if not agency:
             return f"Agency '{self.agency_name}' not found"
 
-        if self.agent_name:
+        if not self.agent_name or self.agent_name == agency.ceo.name:
+            thread: Thread = agency.main_thread
+        else:
             recipient_agent = next(
                 (agent for agent in agency.agents if agent.name == self.agent_name),
                 None,
             )
             if not recipient_agent:
                 return f"Agent '{self.agent_name}' not found in agency '{self.agency_name}'. Available agents: {', '.join(agent.name for agent in agency.agents)}"
-        else:
-            recipient_agent = None
 
-        await asyncio.to_thread(
-            agency.get_completion,
-            message=self.message,
-            recipient_agent=recipient_agent,
-        )
+            thread: Thread = agency.agents_and_threads.get(agency.ceo.name, {}).get(
+                self.agent_name
+            )
+
+        if isinstance(thread, ThreadAsync):
+            return await asyncio.to_thread(
+                thread.get_completion_async,
+                message=self.message,
+                recipient_agent=recipient_agent,
+            )
+        else:
+            await asyncio.to_thread(
+                thread.get_completion,
+                message=self.message,
+                recipient_agent=recipient_agent,
+            )
         return f"Message sent asynchronously. Use 'GetResponse' to check status."
 
 

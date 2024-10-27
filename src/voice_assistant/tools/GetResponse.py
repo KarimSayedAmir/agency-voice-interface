@@ -1,13 +1,17 @@
 import asyncio
+import logging
 from typing import Any, Optional
 
 from agency_swarm import Agency, get_openai_client
+from agency_swarm.threads import Thread
 from agency_swarm.tools import BaseTool
 from openai import OpenAI
 from pydantic import Field, PrivateAttr, field_validator
 
 from voice_assistant.agencies import AGENCIES, AGENCIES_AND_AGENTS_STRING
 from voice_assistant.utils.decorators import timeit_decorator
+
+logger = logging.getLogger(__name__)
 
 
 class GetResponse(BaseTool):
@@ -73,7 +77,7 @@ class GetResponse(BaseTool):
                 self.agent_name
             )
 
-        if not thread:
+        if not thread or not thread.thread or not thread.id:
             return (
                 f"No thread found between '{agency.ceo.name}' and '{self.agent_name}'"
             )
@@ -108,9 +112,9 @@ class GetResponse(BaseTool):
         else:
             return "System Notification: 'No response found from the agent.'"
 
-    def _get_last_run(self, thread) -> Optional[Any]:
+    def _get_last_run(self, thread: Thread) -> Optional[Any]:
         """
-        Retrieves the most recent run of a thread.
+        Retrieves the most recent active run of a thread.
 
         Args:
             thread: The thread object.
@@ -118,28 +122,11 @@ class GetResponse(BaseTool):
         Returns:
             The last run object if available, else None.
         """
-        if not thread.id:
-            thread = self._init_thread(thread)
-
         runs = self._client.beta.threads.runs.list(
             thread_id=thread.id,
             order="desc",
         )
         return runs.data[0] if runs.data else None
-
-    def _init_thread(self, thread) -> Any:
-        """
-        Initializes a thread if it does not have an ID.
-
-        Args:
-            thread: The thread object.
-
-        Returns:
-            The initialized thread object.
-        """
-        if thread.id:
-            return self._client.beta.threads.retrieve(thread.id)
-        return self._client.beta.threads.create()
 
 
 # Dynamically update the class docstring with the list of agencies and their agents
