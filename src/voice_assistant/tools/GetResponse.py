@@ -77,10 +77,10 @@ class GetResponse(BaseTool):
                 self.agent_name
             )
 
-        if not thread or not thread.thread or not thread.id:
-            return (
-                f"No thread found between '{agency.ceo.name}' and '{self.agent_name}'"
-            )
+        if not thread:
+            return f"Error: No thread found between '{agency.ceo.name}' and '{self.agent_name}'"
+        if not thread.thread or not thread.id:
+            return f"Error: Thread between '{agency.ceo.name}' and '{self.agent_name}' is not initialized"
 
         run = await asyncio.to_thread(self._get_last_run, thread)
 
@@ -113,15 +113,6 @@ class GetResponse(BaseTool):
             return "System Notification: 'No response found from the agent.'"
 
     def _get_last_run(self, thread: Thread) -> Optional[Any]:
-        """
-        Retrieves the most recent active run of a thread.
-
-        Args:
-            thread: The thread object.
-
-        Returns:
-            The last run object if available, else None.
-        """
         runs = self._client.beta.threads.runs.list(
             thread_id=thread.id,
             order="desc",
